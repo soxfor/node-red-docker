@@ -1,0 +1,108 @@
+ARG ARCH="amd64"
+ARG NODE_VERSION="12"
+ARG OS="buster-slim"
+
+#### Stage BASE ########################################################################################################
+FROM ${ARCH}/node:${NODE_VERSION}-${OS} AS base
+ARG TIME_ZONE
+
+ENV TERM="xterm" TZ=${TIME_ZONE} DEBIAN_FRONTEND="noninteractive"
+
+# Copy scripts
+COPY scripts/*.sh /tmp/
+
+# Install tools, create Node-RED app and data dir, add user and set rights
+RUN set -ex && \
+    apt-get update && \
+    apt-get -y install apt-utils && \
+    apt-get -y dist-upgrade && \
+    apt-get -y install \
+        tzdata \
+        iputils\* \
+        curl \
+        nano \
+        git \
+        openssl \
+        openssh-client && \
+    ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && \
+    dpkg-reconfigure tzdata && \
+    apt-get -y autoremove && \
+    mkdir -p /usr/src/node-red /data && \
+    userdel --remove --force node && \   
+    useradd --home-dir /usr/src/node-red --no-create-home --uid 1000 node-red && \
+    chown -R node-red:node-red /data && \
+    chown -R node-red:node-red /usr/src/node-red
+
+# Set work directory
+WORKDIR /usr/src/node-red
+
+# package.json contains Node-RED NPM module and node dependencies
+COPY package.json .
+
+#### Stage BUILD #######################################################################################################
+FROM base AS build
+ARG NODES
+
+# Install Build tools, & Node-RED-Contrib-DB2-Fixed
+RUN apt-get -y install build-essential make linux-headers-amd64 udev python python3 && \
+    npm install --unsafe-perm --no-update-notifier --only=production && \
+    chmod +x /tmp/remove_native_gpio.sh && \
+    /tmp/remove_native_gpio.sh && \
+    chmod +x /tmp/install_extra_nodes.sh && \
+    /tmp/install_extra_nodes.sh && \
+    cp -R node_modules prod_node_modules
+
+#### Stage RELEASE #####################################################################################################
+FROM base AS RELEASE
+ARG BUILD_DATE
+ARG BUILD_VERSION
+ARG BUILD_REF
+ARG NODE_RED_VERSION
+ARG ARCH
+ARG TAG_SUFFIX
+ARG NODES
+
+LABEL org.label-schema.build-date=${BUILD_DATE} \
+    org.label-schema.docker.dockerfile=".docker/Dockerfile.debian" \
+    org.label-schema.license="Apache-2.0" \
+    org.label-schema.name="Node-RED" \
+    org.label-schema.version=${BUILD_VERSION} \
+    org.label-schema.description="Low-code programming for event-driven applications." \
+    org.label-schema.url="https://nodered.org" \
+    org.label-schema.vcs-ref=${BUILD_REF} \
+    org.label-schema.vcs-type="Git" \
+    org.label-schema.vcs-url="https://github.com/soxfor/node-red-docker" \
+    org.label-schema.arch=${ARCH} \
+    authors="Dave Conway-Jones, Nick O'Leary, James Thomas, Raymond Mouthaan"
+
+COPY --from=build /usr/src/node-red/prod_node_modules ./node_modules
+
+# Chown, install build-tools, install extra nodes dependencies & Clean up
+RUN chown -R node-red:node-red /usr/src/node-red && \
+    chmod +x /tmp/install_build-tools.sh && \
+    /tmp/install_build-tools.sh && \
+    chmod +x /tmp/install_extra_nodes.sh && \
+    /tmp/install_extra_nodes.sh depends && \
+    rm -r /tmp/*
+
+USER node-red
+
+# Env variables
+ENV NODE_RED_VERSION=$NODE_RED_VERSION \
+    NODE_PATH=/usr/src/node-red/node_modules:/data/node_modules \
+    FLOWS=flows.json
+
+# ENV NODE_RED_ENABLE_SAFE_MODE=true    # Uncomment to enable safe start mode (flows not running)
+# ENV NODE_RED_ENABLE_PROJECTS=true     # Uncomment to enable projects option
+
+# User configuration directory volume
+VOLUME ["/data"]
+
+# Expose the listening port of node-red
+EXPOSE 1880
+
+# Add a healthcheck (default every 30 secs)
+# HEALTHCHECK CMD curl http://localhost:1880/ || exit 1
+
+ENTRYPOINT ["npm", "start", "--", "--userDir", "/data"]
+
