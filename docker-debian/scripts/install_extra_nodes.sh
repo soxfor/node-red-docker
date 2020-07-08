@@ -16,20 +16,26 @@ IFS=$','
 for node in ${NODES}; do
   case "${node}" in
     "ibm_db")
-      if [[ "$1" = "depends" ]]; then
-        install_node-red-contrib-db2-fixed_depends
-      else
+      if [[ "$1" != "depends" ]]; then
         install_node-red-contrib-db2-fixed
+      else
+        install_node-red-contrib-db2-fixed_depends
       fi
       ;;
     "zlib")
-      npm install --unsafe-perm --no-cache --only=production zlib
+      if [[ "$1" != "depends" ]]; then 
+        npm install --unsafe-perm --no-cache --only=production zlib 
+      fi
       ;;
     "fs")
-      npm install --unsafe-perm --no-cache --only=production fs
+      if [[ "$1" != "depends" ]]; then 
+        npm install --unsafe-perm --no-cache --only=production fs
+      fi
       ;;
     "btoa")
-      npm install --unsafe-perm --no-cache --only=production btoa
+      if [[ "$1" != "depends" ]]; then 
+        npm install --unsafe-perm --no-cache --only=production btoa
+      fi
       ;;
     *)
       printf "Skip installing extra Nodes\n"
