@@ -22,6 +22,15 @@ for node in ${NODES}; do
         install_node-red-contrib-db2-fixed
       fi
       ;;
+    "zlib")
+      npm install --unsafe-perm --no-cache --only=production zlib
+      ;;
+    "fs")
+      npm install --unsafe-perm --no-cache --only=production fs
+      ;;
+    "btoa")
+      npm install --unsafe-perm --no-cache --only=production btoa
+      ;;
     *)
       printf "Skip installing extra Nodes\n"
       ;;
